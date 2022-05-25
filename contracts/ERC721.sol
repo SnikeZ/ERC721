@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.7;
 import "./IERC721.sol";
 import "./IERC721Receiver.sol";
 
@@ -7,21 +7,34 @@ contract ERC721 is IERC721{
     
     string _name;
     string _symbol;
+    uint _totalSupply;
+    address _owner;
 
-    constructor(string memory name_, string memory symbol_) {
+    constructor(string memory name_, string memory symbol_, uint totalSupply_) {
         _name = name_;
         _symbol = symbol_;
+        _owner = msg.sender;
+        for (uint i = 0; i < totalSupply_; i++){
+            _mint(i);
+        }
     }
+    mapping(uint => address) private _owners;
 
-    mapping(uint256 => address) private _owners;
+    mapping(address => uint) private _balances;
 
-    mapping(address => uint256) private _balances;
-
-    mapping(uint256 => address) private _tokenApprovals;
+    mapping(uint => address) private _tokenApprovals;
 
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    function ownerOf(uint256 _tokenId) public view returns (address){
+    function name() public view returns(string memory){
+        return _name;
+    }
+
+    function symbol() public view returns(string memory){
+        return _symbol;
+    }
+
+    function ownerOf(uint _tokenId) public view returns (address){
         require(_owners[_tokenId] != address(0), "ERC721 not a valid NFT");
         return _owners[_tokenId];
     }
@@ -31,45 +44,56 @@ contract ERC721 is IERC721{
         _;
     }
 
-    modifier ownerOrOperator(uint tokenId){
+    modifier ownerOrApproved(uint tokenId){
         address owner = ownerOf(tokenId);
-        require(owner == msg.sender || _operatorApprovals[owner][msg.sender], "ERC721: not an owner nor operator");
+        require(owner == msg.sender || _operatorApprovals[owner][msg.sender] || _tokenApprovals[tokenId] == msg.sender, "ERC721: not an owner nor operator");
         _;
     }
-    
-    function balanceOf(address _owner) public view returns (uint256){
+
+    function totalSupply() public view returns(uint){
+        return _totalSupply;
+    }
+
+    function balanceOf(address _owner) public view returns (uint){
         require(_owner != address(0), "ERC721: address zero is not a valid owner!");
         return _balances[_owner];
     }
 
+    function _mint(uint tokenId) public{
+        require(msg.sender == _owner, "ERC721 mint error, not an owner");
+        require(tokenId == _totalSupply, "ERC721 cant mint this token");
+        _totalSupply += 1;
+        _balances[_owner] += 1;
+        _owners[tokenId] = _owner;
+    }
 
-
-    function safeTransferFrom(address _from, address _to, uint256 _tokenId, bytes memory data) public payable ownerOrOperator(_tokenId){
+    function safeTransferFrom(address _from, address _to, uint _tokenId, bytes memory data) public payable ownerOrApproved(_tokenId){
             require(_checkOnERC721Received(_from, _to, _tokenId, data), "ERC721: transfer to non ERC721Receiver implementer");
             _transfer(_from, _to, _tokenId);
     }
 
-    function safeTransferFrom(address _from, address _to, uint256 _tokenId) public payable{
+    function safeTransferFrom(address _from, address _to, uint _tokenId) public payable {
         safeTransferFrom(_from, _to, _tokenId, "");
     }
 
-    function transferFrom(address _from, address _to, uint256 _tokenId) external payable ownerOrOperator(_tokenId){
+    function transferFrom(address _from, address _to, uint _tokenId) external payable ownerOrApproved(_tokenId){
         _transfer(_from, _to, _tokenId);
     }
 
-    function approve(address _approved, uint256 _tokenId) external payable ownerOrOperator(_tokenId){
+    function approve(address _approved, uint _tokenId) external payable ownerOrApproved(_tokenId) validNFT(_tokenId){
         address owner = ownerOf(_tokenId);
         require(owner != _approved, "ERC721: approval to current owner");
         _approve(owner, _approved, _tokenId);
     }
 
     function setApprovalForAll(address _operator, bool _approved) external{
+        require(_operator != msg.sender, "ERC721 operator and owner cant be the same address");
         require(_operator != address(0), "ERC721 operator cant be zero address");
         _operatorApprovals[msg.sender][_operator] = _approved;
         emit ApprovalForAll(msg.sender, _operator, _approved);
     }
 
-    function getApproved(uint256 _tokenId) external view validNFT(_tokenId) returns (address){
+    function getApproved(uint _tokenId) external view validNFT(_tokenId) returns (address){
          return _tokenApprovals[_tokenId];
     }
 
@@ -77,12 +101,12 @@ contract ERC721 is IERC721{
         return _operatorApprovals[_owner][_operator];
     }
 
-    function _approve(address _owner, address _approved, uint _tokenId) internal virtual{
+    function _approve(address _owner, address _approved, uint _tokenId) internal virtual validNFT(_tokenId){
         _tokenApprovals[_tokenId] = _approved;
         emit Approval(_owner, _approved, _tokenId);
     }
 
-    function _transfer(address _from, address _to, uint _tokenId) internal virtual {
+    function _transfer(address _from, address _to, uint _tokenId) internal virtual validNFT(_tokenId) {
         require(_from == ownerOf(_tokenId), "ERC721 transfer from incorect owner");
         require(_to != address(0), "ERC721 transfer to zero address");
         _balances[_from] -= 1;
@@ -103,7 +127,7 @@ contract ERC721 is IERC721{
     function _checkOnERC721Received(
         address from,
         address to,
-        uint256 tokenId,
+        uint tokenId,
         bytes memory data
     ) private returns (bool) {
         if (isContract(to)) {
@@ -125,4 +149,8 @@ contract ERC721 is IERC721{
     }
 
 
+}
+
+contract Map is ERC721{
+    constructor() ERC721("MapToken", "Map", 10){}
 }
